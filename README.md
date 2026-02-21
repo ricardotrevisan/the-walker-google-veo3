@@ -32,7 +32,13 @@ GEMINI_API_KEY="YOUR_KEY_HERE"
 [
   {
     "name": "scene_01",
-    "prompt": "Visual scene description...\nAudio: audio description..."
+    "prompt": "Visual scene description...\nAudio: audio description...",
+    "first_frame_image": "assets/scene_01_start.png",
+    "last_frame_image": "assets/scene_01_end.png",
+    "reference_images": [
+      "assets/character_ref_front.png",
+      "assets/character_ref_profile.png"
+    ]
   }
 ]
 ```
@@ -40,6 +46,11 @@ GEMINI_API_KEY="YOUR_KEY_HERE"
 Required fields per item:
 - `name` (string, used as the `.mp4` file name)
 - `prompt` (string, full scene prompt)
+
+Optional fields per item:
+- `first_frame_image` (string path): uses this image as the starting frame/conditioning image
+- `last_frame_image` (string path): asks Veo to end the clip near this target frame
+- `reference_images` (list of up to 3 string paths): identity/style anchors for continuity (useful for same character)
 
 ## Run
 
@@ -56,6 +67,14 @@ Outputs:
 - The script is currently configured to process only the first scene (`scenes[:1]`).
 - If no scene is generated, the script exits without concatenation.
 - If only 1 scene is generated, it keeps just that scene file.
+
+## Continuity Tips (Same Character)
+
+- Reuse the same `reference_images` for each scene.
+- For scene N+1, set `first_frame_image` to a still frame exported from scene N.
+- Keep core character description and wardrobe wording consistent in every `prompt`.
+- Use a fixed `SEED` in `storytelling.py` while iterating prompts for stable results.
+- The script can auto-chain frames across scenes (`AUTO_CHAIN_SCENES = True`): it extracts `out_scenes/<scene>_last_frame.png` and uses it as the next scene start frame when `first_frame_image` is not provided.
 
 ## Common Errors
 

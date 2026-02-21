@@ -3,6 +3,7 @@ import time
 import json
 import subprocess
 from pathlib import Path
+from typing import Any
 
 from google import genai
 from google.genai import errors
@@ -12,7 +13,7 @@ from dotenv import load_dotenv
 # ----------------------------
 # CONFIG
 # ----------------------------
-MODEL = "veo-3.1-fast-generate-preview"  # Veo 3.1 Fast Preview model id :contentReference[oaicite:4]{index=4}
+MODEL = "veo-3.1-generate-preview"
 OUT_DIR = Path("out_scenes")
 OUT_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -21,8 +22,12 @@ POLL_SECONDS = 10
 
 # Video config
 ASPECT_RATIO = "16:9"   # or "9:16" :contentReference[oaicite:5]{index=5}
-RESOLUTION = "720p"     # 720p supports 4/6/8s; 1080p/4k only 8s :contentReference[oaicite:6]{index=6}
-DURATION_SECONDS = 6    # 4, 6, or 8 :contentReference[oaicite:7]{index=7}
+RESOLUTION = "1080p"   # Prefer higher fidelity for quality-first passes.
+DURATION_SECONDS = 8    # Longer duration improves motion continuity.
+
+# Optional: set a fixed seed for reproducible prompt iteration.
+SEED = None
+AUTO_CHAIN_SCENES = True
 
 # Optional: steer away from unwanted artifacts
 NEGATIVE_PROMPT = "cartoon, drawing, low quality, text overlays, watermarks, subtitles"
@@ -45,7 +50,20 @@ def require_env():
         )
 
 
-def load_scenes(file_path: Path) -> list[tuple[str, str]]:
+def _optional_path(value: Any, field_name: str, item_idx: int) -> Path | None:
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value.strip():
+        raise RuntimeError(f"Invalid item {item_idx}: '{field_name}' must be a non-empty string path.")
+    p = Path(value.strip())
+    if not p.exists():
+        raise RuntimeError(f"Invalid item {item_idx}: '{field_name}' path does not exist: {p}")
+    if not p.is_file():
+        raise RuntimeError(f"Invalid item {item_idx}: '{field_name}' must be a file: {p}")
+    return p
+
+
+def load_scenes(file_path: Path) -> list[dict[str, Any]]:
     if not file_path.exists():
         raise RuntimeError(
             f"Scenes file not found: {file_path}\n"
@@ -58,7 +76,7 @@ def load_scenes(file_path: Path) -> list[tuple[str, str]]:
     if not isinstance(raw, list) or not raw:
         raise RuntimeError("The scenes file must contain a non-empty JSON list.")
 
-    scenes: list[tuple[str, str]] = []
+    scenes: list[dict[str, Any]] = []
     for i, item in enumerate(raw, start=1):
         if not isinstance(item, dict):
             raise RuntimeError(f"Invalid item at position {i}: expected a JSON object.")
@@ -68,29 +86,82 @@ def load_scenes(file_path: Path) -> list[tuple[str, str]]:
             raise RuntimeError(f"Invalid item {i}: missing or empty 'name' field.")
         if not isinstance(prompt, str) or not prompt.strip():
             raise RuntimeError(f"Invalid item {i}: missing or empty 'prompt' field.")
-        scenes.append((name.strip(), prompt.strip()))
+        reference_images_raw = item.get("reference_images", [])
+        if reference_images_raw is None:
+            reference_images_raw = []
+        if not isinstance(reference_images_raw, list):
+            raise RuntimeError(f"Invalid item {i}: 'reference_images' must be a list of file paths.")
+        if len(reference_images_raw) > 3:
+            raise RuntimeError(f"Invalid item {i}: Veo 3.1 supports at most 3 reference images.")
+        reference_images: list[Path] = []
+        for idx, ref in enumerate(reference_images_raw, start=1):
+            ref_path = _optional_path(ref, f"reference_images[{idx}]", i)
+            if ref_path is not None:
+                reference_images.append(ref_path)
+
+        scenes.append(
+            {
+                "name": name.strip(),
+                "prompt": prompt.strip(),
+                "first_frame_image": _optional_path(item.get("first_frame_image"), "first_frame_image", i),
+                "last_frame_image": _optional_path(item.get("last_frame_image"), "last_frame_image", i),
+                "reference_images": reference_images,
+            }
+        )
     return scenes
 
 
-def generate_one_scene(client: genai.Client, name: str, prompt: str) -> Path:
+def _load_image_from_file(path: Path) -> types.Image:
+    if not hasattr(types.Image, "from_file"):
+        raise RuntimeError(
+            "This google-genai version does not support types.Image.from_file(). "
+            "Upgrade with: pip install -U google-genai"
+        )
+    return types.Image.from_file(str(path))
+
+
+def generate_one_scene(client: genai.Client, scene: dict[str, Any]) -> Path:
     """
     Generates one video scene via Veo and saves as mp4.
     Uses polling pattern from the official docs. :contentReference[oaicite:8]{index=8}
     """
-    config = types.GenerateVideosConfig(
+    name = scene["name"]
+    prompt = scene["prompt"]
+    first_frame_image: Path | None = scene.get("first_frame_image")
+    last_frame_image: Path | None = scene.get("last_frame_image")
+    reference_images_paths: list[Path] = scene.get("reference_images", [])
+
+    config_kwargs: dict[str, Any] = dict(
         aspect_ratio=ASPECT_RATIO,
         resolution=RESOLUTION,
         # Note: docs show durationSeconds; Python SDK commonly uses duration_seconds.
         duration_seconds=DURATION_SECONDS,
         negative_prompt=NEGATIVE_PROMPT,
         number_of_videos=1,
+        seed=SEED,
     )
+    if last_frame_image:
+        config_kwargs["last_frame"] = _load_image_from_file(last_frame_image)
+    if reference_images_paths:
+        config_kwargs["reference_images"] = [
+            types.VideoGenerationReferenceImage(
+                image=_load_image_from_file(ref_path),
+                reference_type="asset",
+            )
+            for ref_path in reference_images_paths
+        ]
+    config = types.GenerateVideosConfig(**config_kwargs)
 
     try:
-        operation = client.models.generate_videos(
+        request_kwargs: dict[str, Any] = dict(
             model=MODEL,
             prompt=prompt,
             config=config,
+        )
+        if first_frame_image:
+            request_kwargs["image"] = _load_image_from_file(first_frame_image)
+        operation = client.models.generate_videos(
+            **request_kwargs,
         )
     except errors.ClientError as exc:
         if exc.code == 429:
@@ -150,6 +221,26 @@ def concat_videos_ffmpeg(video_paths: list[Path], out_path: Path) -> None:
     print(f"Final video saved -> {out_path}")
 
 
+def extract_last_frame(video_path: Path, out_path: Path) -> Path:
+    """
+    Extracts an approximate last frame from a generated video.
+    This output can be fed as the next scene's first_frame_image.
+    """
+    cmd = [
+        "ffmpeg",
+        "-y",
+        "-sseof",
+        "-0.1",
+        "-i",
+        str(video_path),
+        "-frames:v",
+        "1",
+        str(out_path),
+    ]
+    subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    return out_path
+
+
 def main():
     load_dotenv()
     require_env()
@@ -158,12 +249,26 @@ def main():
     client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
     paths = []
-    for name, prompt in scenes[:1]:
+    previous_last_frame: Path | None = None
+    for scene in scenes[:1]:
+        name = scene["name"]
+        if AUTO_CHAIN_SCENES and previous_last_frame and not scene.get("first_frame_image"):
+            scene["first_frame_image"] = previous_last_frame
+            print(f"[{name}] auto-chain first frame <- {previous_last_frame}")
         try:
-            paths.append(generate_one_scene(client, name, prompt))
+            video_path = generate_one_scene(client, scene)
+            paths.append(video_path)
+            if AUTO_CHAIN_SCENES:
+                previous_last_frame = extract_last_frame(
+                    video_path,
+                    OUT_DIR / f"{name}_last_frame.png",
+                )
         except RuntimeError as exc:
             print(f"[{name}] error: {exc}")
             break
+        except subprocess.CalledProcessError:
+            print(f"[{name}] warning: failed to extract last frame; continuing without auto-chain.")
+            previous_last_frame = None
 
     if not paths:
         print("No scene was generated. Exiting without concatenation.")
