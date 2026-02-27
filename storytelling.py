@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 # ----------------------------
 # CONFIG
 # ----------------------------
-MODEL = "veo-3.1-generate-preview"
+DEFAULT_MODEL = "veo-3.1-generate-preview"
 OUT_DIR = Path("out_scenes")
 OUT_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -21,9 +21,9 @@ OUT_DIR.mkdir(parents=True, exist_ok=True)
 POLL_SECONDS = 10
 
 # Video config
-ASPECT_RATIO = "16:9"   # or "9:16" :contentReference[oaicite:5]{index=5}
-RESOLUTION = "1080p"   # Prefer higher fidelity for quality-first passes.
-DURATION_SECONDS = 8    # Longer duration improves motion continuity.
+ASPECT_RATIO = "9:16"   # or "9:16" :contentReference[oaicite:5]{index=5}
+RESOLUTION = "720p"   # Prefer higher fidelity for quality-first passes.
+DEFAULT_DURATION_SECONDS = 6
 
 # Optional: set a fixed seed for reproducible prompt iteration.
 SEED = None
@@ -38,6 +38,22 @@ STYLE_BIBLE = (
     "soft diffused volumetric light, symmetrical cinematic framing, minimalist corridor"
 )
 SCENES_FILE = Path("storytelling.json")
+RUN_LOG_FILE = OUT_DIR / "run_log.jsonl"
+
+
+def _utc_now_iso() -> str:
+    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+
+
+def _append_run_log(event: dict[str, Any]) -> None:
+    payload = dict(event)
+    payload.setdefault("ts_utc", _utc_now_iso())
+    try:
+        with RUN_LOG_FILE.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(payload, ensure_ascii=True) + "\n")
+    except OSError as exc:
+        # Logging must never stop video generation flow.
+        print(f"[log] warning: failed to write run log: {exc}")
 
 
 def require_env():
@@ -48,6 +64,26 @@ def require_env():
             "Set the GEMINI_API_KEY environment variable before running.\n"
             "Example: export GEMINI_API_KEY='...'\n"
         )
+
+
+def get_model() -> str:
+    model = os.getenv("GEMINI_MODEL", DEFAULT_MODEL).strip()
+    if not model:
+        raise RuntimeError("GEMINI_MODEL cannot be empty.")
+    return model
+
+
+def _get_env_int(name: str, default: int, min_value: int = 1) -> int:
+    raw = os.getenv(name)
+    if raw is None or not raw.strip():
+        return default
+    try:
+        value = int(raw.strip())
+    except ValueError as exc:
+        raise RuntimeError(f"{name} must be an integer. Got: {raw!r}") from exc
+    if value < min_value:
+        raise RuntimeError(f"{name} must be >= {min_value}. Got: {value}.")
+    return value
 
 
 def _optional_path(value: Any, field_name: str, item_idx: int) -> Path | None:
@@ -61,6 +97,16 @@ def _optional_path(value: Any, field_name: str, item_idx: int) -> Path | None:
     if not p.is_file():
         raise RuntimeError(f"Invalid item {item_idx}: '{field_name}' must be a file: {p}")
     return p
+
+
+def _optional_duration_seconds(value: Any, field_name: str, item_idx: int) -> int | None:
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise RuntimeError(f"Invalid item {item_idx}: '{field_name}' must be an integer.")
+    if value < 4:
+        raise RuntimeError(f"Invalid item {item_idx}: '{field_name}' must be >= 4.")
+    return value
 
 
 def load_scenes(file_path: Path) -> list[dict[str, Any]]:
@@ -106,6 +152,7 @@ def load_scenes(file_path: Path) -> list[dict[str, Any]]:
                 "first_frame_image": _optional_path(item.get("first_frame_image"), "first_frame_image", i),
                 "last_frame_image": _optional_path(item.get("last_frame_image"), "last_frame_image", i),
                 "reference_images": reference_images,
+                "duration_seconds": _optional_duration_seconds(item.get("duration_seconds"), "duration_seconds", i),
             }
         )
     return scenes
@@ -117,10 +164,20 @@ def _load_image_from_file(path: Path) -> types.Image:
             "This google-genai version does not support types.Image.from_file(). "
             "Upgrade with: pip install -U google-genai"
         )
-    return types.Image.from_file(str(path))
+    # SDK versions differ: some accept positional path, newer ones require
+    # keyword-only `location`.
+    try:
+        return types.Image.from_file(location=str(path))
+    except TypeError:
+        return types.Image.from_file(str(path))
 
 
-def generate_one_scene(client: genai.Client, scene: dict[str, Any]) -> Path:
+def generate_one_scene(
+    client: genai.Client,
+    scene: dict[str, Any],
+    model: str,
+    duration_seconds: int,
+) -> Path:
     """
     Generates one video scene via Veo and saves as mp4.
     Uses polling pattern from the official docs. :contentReference[oaicite:8]{index=8}
@@ -135,7 +192,7 @@ def generate_one_scene(client: genai.Client, scene: dict[str, Any]) -> Path:
         aspect_ratio=ASPECT_RATIO,
         resolution=RESOLUTION,
         # Note: docs show durationSeconds; Python SDK commonly uses duration_seconds.
-        duration_seconds=DURATION_SECONDS,
+        duration_seconds=duration_seconds,
         negative_prompt=NEGATIVE_PROMPT,
         number_of_videos=1,
         seed=SEED,
@@ -154,7 +211,7 @@ def generate_one_scene(client: genai.Client, scene: dict[str, Any]) -> Path:
 
     try:
         request_kwargs: dict[str, Any] = dict(
-            model=MODEL,
+            model=model,
             prompt=prompt,
             config=config,
         )
@@ -170,6 +227,13 @@ def generate_one_scene(client: genai.Client, scene: dict[str, Any]) -> Path:
                 "Check plan/billing and limits at:\n"
                 "- https://ai.dev/rate-limit\n"
                 "- https://ai.google.dev/gemini-api/docs/rate-limits"
+            ) from exc
+        if exc.code == 404:
+            raise RuntimeError(
+                f"Model not found or unsupported for video generation: '{model}'.\n"
+                "Try one of these model IDs in GEMINI_MODEL:\n"
+                "- veo-3.1-generate-preview\n"
+                "- veo-3.1-fast-generate-preview\n"
             ) from exc
         raise
 
@@ -205,7 +269,8 @@ def concat_videos_ffmpeg(video_paths: list[Path], out_path: Path) -> None:
     with list_file.open("w", encoding="utf-8") as f:
         for p in video_paths:
             # ffmpeg concat demuxer expects this format
-            f.write(f"file '{p.as_posix()}'\n")
+            resolved = p.resolve().as_posix().replace("'", "'\\''")
+            f.write(f"file '{resolved}'\n")
 
     cmd = [
         "ffmpeg",
@@ -244,42 +309,160 @@ def extract_last_frame(video_path: Path, out_path: Path) -> Path:
 def main():
     load_dotenv()
     require_env()
+    model = get_model()
+    default_duration_seconds = _get_env_int("DURATION_SECONDS", DEFAULT_DURATION_SECONDS, min_value=4)
     scenes = load_scenes(SCENES_FILE)
+    max_scenes = _get_env_int("MAX_SCENES", len(scenes), min_value=1)
+    start_scene = _get_env_int("START_SCENE", 1, min_value=1)
+    if start_scene > len(scenes):
+        raise RuntimeError(
+            f"START_SCENE out of range: {start_scene}. "
+            f"Scenes file has {len(scenes)} scene(s)."
+        )
+    selected_scenes = scenes[start_scene - 1 : start_scene - 1 + max_scenes]
+    run_id = f"run_{int(time.time() * 1000)}"
+
+    _append_run_log(
+        {
+            "event": "run_start",
+            "run_id": run_id,
+            "model": model,
+            "default_duration_seconds": default_duration_seconds,
+            "max_scenes": max_scenes,
+            "start_scene": start_scene,
+            "selected_scenes_count": len(selected_scenes),
+            "total_scenes_in_file": len(scenes),
+            "scenes_file": str(SCENES_FILE),
+            "auto_chain_scenes": AUTO_CHAIN_SCENES,
+        }
+    )
 
     client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
     paths = []
     previous_last_frame: Path | None = None
-    for scene in scenes[:1]:
+    if AUTO_CHAIN_SCENES and start_scene > 1 and selected_scenes:
+        previous_scene_name = scenes[start_scene - 2]["name"]
+        candidate_last_frame = OUT_DIR / f"{previous_scene_name}_last_frame.png"
+        if candidate_last_frame.exists():
+            previous_last_frame = candidate_last_frame
+            _append_run_log(
+                {
+                    "event": "run_resume_from_previous_scene",
+                    "run_id": run_id,
+                    "previous_scene": previous_scene_name,
+                    "previous_last_frame": str(candidate_last_frame),
+                }
+            )
+
+    for scene in selected_scenes:
         name = scene["name"]
+        scene_duration_seconds = scene.get("duration_seconds") or default_duration_seconds
+        _append_run_log(
+            {
+                "event": "scene_start",
+                "run_id": run_id,
+                "scene": name,
+                "duration_seconds": scene_duration_seconds,
+                "has_first_frame_image": bool(scene.get("first_frame_image")),
+                "has_last_frame_image": bool(scene.get("last_frame_image")),
+                "reference_images_count": len(scene.get("reference_images", [])),
+            }
+        )
         if AUTO_CHAIN_SCENES and previous_last_frame and not scene.get("first_frame_image"):
             scene["first_frame_image"] = previous_last_frame
             print(f"[{name}] auto-chain first frame <- {previous_last_frame}")
+            _append_run_log(
+                {
+                    "event": "scene_auto_chain_first_frame",
+                    "run_id": run_id,
+                    "scene": name,
+                    "first_frame_image": str(previous_last_frame),
+                }
+            )
         try:
-            video_path = generate_one_scene(client, scene)
+            video_path = generate_one_scene(client, scene, model, scene_duration_seconds)
             paths.append(video_path)
+            _append_run_log(
+                {
+                    "event": "scene_generated",
+                    "run_id": run_id,
+                    "scene": name,
+                    "video_path": str(video_path),
+                    "video_size_bytes": video_path.stat().st_size if video_path.exists() else None,
+                }
+            )
             if AUTO_CHAIN_SCENES:
                 previous_last_frame = extract_last_frame(
                     video_path,
                     OUT_DIR / f"{name}_last_frame.png",
                 )
+                _append_run_log(
+                    {
+                        "event": "scene_last_frame_extracted",
+                        "run_id": run_id,
+                        "scene": name,
+                        "last_frame_path": str(previous_last_frame),
+                    }
+                )
         except RuntimeError as exc:
             print(f"[{name}] error: {exc}")
+            _append_run_log(
+                {
+                    "event": "scene_error",
+                    "run_id": run_id,
+                    "scene": name,
+                    "error": str(exc),
+                }
+            )
             break
         except subprocess.CalledProcessError:
             print(f"[{name}] warning: failed to extract last frame; continuing without auto-chain.")
+            _append_run_log(
+                {
+                    "event": "scene_last_frame_extract_warning",
+                    "run_id": run_id,
+                    "scene": name,
+                }
+            )
             previous_last_frame = None
 
     if not paths:
         print("No scene was generated. Exiting without concatenation.")
+        _append_run_log(
+            {
+                "event": "run_end",
+                "run_id": run_id,
+                "status": "no_scene_generated",
+                "generated_scenes": 0,
+            }
+        )
         return
 
     if len(paths) == 1:
         print(f"Only 1 scene generated: {paths[0]}. Skipping concatenation.")
+        _append_run_log(
+            {
+                "event": "run_end",
+                "run_id": run_id,
+                "status": "single_scene",
+                "generated_scenes": 1,
+                "single_scene_path": str(paths[0]),
+            }
+        )
         return
 
     final_path = Path("final.mp4")
     concat_videos_ffmpeg(paths, final_path)
+    _append_run_log(
+        {
+            "event": "run_end",
+            "run_id": run_id,
+            "status": "concatenated",
+            "generated_scenes": len(paths),
+            "final_path": str(final_path),
+        }
+    )
 
 
 if __name__ == "__main__":

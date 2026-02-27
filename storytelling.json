@@ -1,30 +1,37 @@
 [
   {
     "name": "scene_01",
-    "prompt": "pastel 1960s aesthetic, cold ghostly atmosphere, surreal but calm and intense, soft diffused volumetric light, symmetrical cinematic framing, minimalist corridor. Executive man with tie in a long corridor, beginning to move forward.\nAudio: hollow corridor ambience, deep low drone, subtle synthetic/plastic tension texture, distant mechanical hum, restrained, no voices."
+    "prompt": "cold high-tech near-futurist aesthetic, innovative corporate sci-fi atmosphere, clean metallic architecture, sharp volumetric light, symmetrical cinematic framing, minimalist advanced corridor. Executive man with tie in a long corridor, beginning to move forward.\nAudio: hollow corridor ambience, deep low drone, subtle synthetic/plastic tension texture, distant mechanical hum, restrained, no voices.",
+    "duration_seconds": 4
   },
   {
     "name": "scene_02",
-    "prompt": "pastel 1960s aesthetic, cold ghostly atmosphere, surreal but calm and intense, soft diffused volumetric light, symmetrical cinematic framing, minimalist corridor. The man starts running, controlled intensity.\nAudio: drone slightly intensifies, spacey corridor reverb, faint office noise bleeding in from afar."
+    "prompt": "cold high-tech near-futurist aesthetic, innovative corporate sci-fi atmosphere, clean metallic architecture, sharp volumetric light, symmetrical cinematic framing, minimalist advanced corridor. The man starts running, controlled intensity.\nAudio: drone slightly intensifies, spacey corridor reverb, faint office noise bleeding in from afar.",
+    "duration_seconds": 4
   },
   {
     "name": "scene_03",
-    "prompt": "pastel 1960s aesthetic, cold ghostly atmosphere, surreal but calm and intense, soft diffused volumetric light, symmetrical cinematic framing, minimalist corridor. Floating translucent financial numbers, equations, and holographic graphs orbit him; he reaches but they dissolve into mist.\nAudio: layered unintelligible office voices, distant ringing phones, subtle keyboard typing under the drone; soft holographic interface sweeps."
+    "prompt": "cold high-tech near-futurist aesthetic, innovative corporate sci-fi atmosphere, clean metallic architecture, sharp volumetric light, symmetrical cinematic framing, minimalist advanced corridor. Continuation from the end of scene_02: frontal tracking shot, camera moving backward while the man runs toward the lens, maintaining centered composition. Floating translucent financial numbers, equations, piramidal structures, ancient symbols and holographic graphs orbit him; he reaches but they dissolve into mist while he keeps running.\nAudio: layered unintelligible office voices, distant ringing phones, subtle keyboard typing under the drone; soft holographic interface sweeps.",
+    "duration_seconds": 4
   },
   {
     "name": "scene_04",
-    "prompt": "pastel 1960s aesthetic, cold ghostly atmosphere, surreal but calm and intense, soft diffused volumetric light, symmetrical cinematic framing, minimalist corridor. The ground liquefies into thick viscous pastel wax flowing backward in heavy waves; wide shot emphasizing the melting moving floor while he struggles to run in place.\nAudio: office chaos builds, low-frequency pressure rises, soft laser-like sweeps and digital glissandos cut through."
+    "prompt": "cold high-tech near-futurist aesthetic, innovative corporate sci-fi atmosphere, clean metallic architecture, sharp volumetric light, symmetrical cinematic framing, minimalist advanced corridor. Keep frontal view continuity from scene_03: camera still receding backward as he runs toward it. The ground liquefies into thick viscous pastel wax flowing backward in heavy waves; wide shot emphasizing the melting moving floor while he struggles to keep moving forward toward camera.\nAudio: office chaos builds, low-frequency pressure rises, soft laser-like sweeps and digital glissandos cut through.",
+    "duration_seconds": 6
   },
   {
     "name": "scene_05",
-    "prompt": "pastel 1960s aesthetic, cold ghostly atmosphere, surreal but calm and intense, soft diffused volumetric light, symmetrical cinematic framing, minimalist corridor. A large translucent clock appears above him; he jumps to reach it; it fragments into glowing particles; he returns standing centered in frame.\nAudio: rising tonal tension, peak density, then sudden collapse-office and digital sounds cut abruptly with a deep bass drop."
+    "prompt": "cold high-tech near-futurist aesthetic, innovative corporate sci-fi atmosphere, clean metallic architecture, sharp volumetric light, symmetrical cinematic framing, minimalist advanced corridor. Continue frontal tracking language: camera pulls back as he strugling runs toward it, then a large translucent clock appears above him; he jumps to reach it; it fragments into glowing particles; light explodes white while he lands and remains centered in front view.\nAudio: rising tonal tension, peak density, then sudden collapse-office and digital sounds cut abruptly with a deep bass drop.",
+    "duration_seconds": 4
   },
   {
     "name": "scene_06",
-    "prompt": "pastel 1960s aesthetic, cold ghostly atmosphere, surreal but calm and intense, soft diffused volumetric light, symmetrical cinematic framing, minimalist corridor. His tailored suit morphs smoothly into loose light flowing garments; shoes fade; he becomes barefoot; he slowly sits into lotus position.\nAudio: calm airy ambience replaces tension, subtle fabric morph texture, softened drone."
+    "prompt": "cold high-tech near-futurist aesthetic, innovative corporate sci-fi atmosphere, clean metallic architecture, sharp volumetric light, symmetrical cinematic framing, minimalist advanced corridor. Keep frontal continuity from previous scene as his run decelerates; camera movement softens and settles while still facing him from the front. His tailored suit morphs smoothly into loose light flowing garments; shoes fade; he becomes barefoot; he slowly sits into lotus position.\nAudio: calm airy ambience replaces tension, subtle fabric morph texture, softened drone.",
+    "duration_seconds": 6
   },
   {
     "name": "scene_07",
-    "prompt": "pastel 1960s aesthetic, cold ghostly atmosphere, surreal but calm and intense, soft diffused volumetric light, symmetrical cinematic framing, minimalist corridor. Behind him, a massive luminous mandala forms; a glowing lotus at the center; light expands in size and brightness until full whiteout.\nAudio: gentle harmonic swell and airy shimmer building into a soft overwhelming wash, ending in near silence."
+    "prompt": "cold high-tech near-futurist aesthetic, innovative corporate sci-fi atmosphere, clean metallic architecture, sharp volumetric light, symmetrical cinematic framing, minimalist advanced corridor. Frontal composition is preserved as he remains centered in lotus; behind him, a massive luminous mandala forms; a glowing lotus at the center; light expands in size and brightness until full whiteout.\nAudio: gentle harmonic swell and airy shimmer building into a soft overwhelming wash, ending in near silence.",
+    "duration_seconds": 6
   }
 ]

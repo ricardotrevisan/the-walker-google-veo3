@@ -22,6 +22,7 @@ Create/edit the `.env` file:
 
 ```env
 GEMINI_API_KEY="YOUR_KEY_HERE"
+GEMINI_MODEL="veo-3.1-generate-preview"
 ```
 
 ## Storytelling Source (JSON)
@@ -33,6 +34,7 @@ GEMINI_API_KEY="YOUR_KEY_HERE"
   {
     "name": "scene_01",
     "prompt": "Visual scene description...\nAudio: audio description...",
+    "duration_seconds": 4,
     "first_frame_image": "assets/scene_01_start.png",
     "last_frame_image": "assets/scene_01_end.png",
     "reference_images": [
@@ -48,6 +50,7 @@ Required fields per item:
 - `prompt` (string, full scene prompt)
 
 Optional fields per item:
+- `duration_seconds` (integer >= 4): clip duration for that scene; if omitted, falls back to `.env`/default `DURATION_SECONDS` (also >= 4)
 - `first_frame_image` (string path): uses this image as the starting frame/conditioning image
 - `last_frame_image` (string path): asks Veo to end the clip near this target frame
 - `reference_images` (list of up to 3 string paths): identity/style anchors for continuity (useful for same character)
